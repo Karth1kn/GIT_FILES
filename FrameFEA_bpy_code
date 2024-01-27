@@ -1,0 +1,896 @@
+bl_info = {
+    "name": "Frame_FEA",
+    "author": "K@rth!kN",
+    "version": (1, 0),
+    "blender": (2, 80, 0),
+    "location": "3D Viewport > Sidebar > 3DTrussFEA",
+    "description": "Easy 3D Frame simulation in blender!",
+    "category": "Development",
+}
+
+import bpy
+import math
+from bpy.props import FloatProperty, IntProperty, BoolProperty, StringProperty
+import subprocess
+import os
+import csv
+import time
+script_dir = os.path.dirname(os.path.abspath(__file__))
+dir_path = os.path.dirname(script_dir)
+output_bytes = subprocess.check_output('where python', shell=True)
+
+output_str = output_bytes.decode('utf-8')
+python_paths = output_str.strip().split('\n')
+main_path = os.path.join(dir_path, 'D3_FRAME.py')
+if python_paths:
+    python_interpreter = python_paths[0].strip()
+
+#verts = bpy.context.active_object.data.vertices
+#edges = bpy.context.active_object.data.edges
+
+def define_mesh():
+    so = bpy.context.active_object
+    if so and so.type == 'MESH' :
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.mesh.delete(type = 'ONLY_FACE')
+        bpy.ops.object.mode_set(mode='OBJECT')
+    ###################################
+    bpy.context.view_layer.update()
+    global verts
+    verts = so.data.vertices
+    global edges
+    edges = so.data.edges
+    global faces
+    faces = so.data.polygons
+    
+    coord_path = os.path.join(dir_path, 'coord.csv')
+    #print(script_dir)
+    with open(coord_path,'w') as cord:
+        try:
+            for i in verts:
+                global_cord = so.matrix_world @ i.co
+                cord.write(f'{global_cord.x},{global_cord.y},{global_cord.z}\n')
+        except Exception:
+            print('failed')
+    
+    con_path = os.path.join(dir_path, 'connect.csv')
+    with open(con_path,'w') as connect:
+        for j in edges:
+            connect.write(f'{j.vertices[0]},{j.vertices[1]}\n')
+
+#print([[i.vertices[0] , i.vertices[1]] for i in bpy.context.active_object.data.edges])
+        
+def call_ploter():
+    scene = bpy.context.scene
+    ip = scene.my_addon_properties.interp_path
+    if ip == '':
+        subprocess.run([python_interpreter, main_path, 'ploter'  ], check = True)
+    else:   
+        subprocess.run([ip, main_path, 'ploter'  ], check = True)
+    
+def call_sparser():
+    scene = bpy.context.scene
+    ip = scene.my_addon_properties.interp_path
+    if ip == '':
+        subprocess.run([python_interpreter, main_path, 'sparser'  ], check = True)
+    else:   
+        subprocess.run([ip, main_path, 'sparser'  ], check = True)
+
+def call_solver():
+    scene = bpy.context.scene
+    ip = scene.my_addon_properties.interp_path
+    if ip == '':
+        subprocess.run([python_interpreter, main_path, 'main_sequence'  ], check = True)
+    else:   
+        subprocess.run([ip, main_path, 'main_sequence'  ], check = True)
+        
+class MyAddonProperties(bpy.types.PropertyGroup):
+    opt_x: bpy.props.BoolProperty(name='UX', default=False)
+    opt_y: bpy.props.BoolProperty(name='UY', default=False)
+    opt_z: bpy.props.BoolProperty(name='UZ', default=False)
+    
+    opt_rx: bpy.props.BoolProperty(name='RX', default=False)
+    opt_ry: bpy.props.BoolProperty(name='RY', default=False)
+    opt_rz: bpy.props.BoolProperty(name='RZ', default=False)
+    opt_xyz: bpy.props.BoolProperty(name='All DOF', default=False)
+    
+    euler : bpy.props.BoolProperty(name='Euler-Bernoulli', default=True)
+    timo : bpy.props.BoolProperty(name='Timoshenko-Ehrenfest', default=False)
+    slfwt : bpy.props.BoolProperty(name='Include Self weight', default=False)
+    
+    force_X: FloatProperty(
+    name="FX",
+    default=0.0,
+    description="load vector in x direction"
+    )
+    force_Y: FloatProperty(
+    name="FY",
+    default=0.0,
+    description="load vector in y direction"
+    )
+    force_Z: FloatProperty(
+    name="FZ",
+    default=0.0,
+    description="load vector in z direction"
+    )
+    moment_X: FloatProperty(
+    name="MX",
+    default=0.0,
+    description="moment in x direction"
+    )
+    moment_Y: FloatProperty(
+    name="MY",
+    default=0.0,
+    description="moment in y direction"
+    )
+    moment_Z: FloatProperty(
+    name="MZ",
+    default=0.0,
+    description="moment in z direction"
+    )
+    
+    youngs_modulus : FloatProperty(
+    name = 'Youngs Modulus',
+    default = 0.0,
+    description = 'Enter youngs modulus of material in N/m^2',
+    min = 0
+    )
+    
+    mom_inertia_Y : FloatProperty(
+    name = 'Iy',
+    default = 0.0,
+    description = 'Enter area moment of inertia about y axis in m^4',
+    min = 0
+    )
+    
+    mom_inertia_Z : FloatProperty(
+    name = 'Iz',
+    default = 0.0,
+    description = 'Enter area moment of inertia about z axis in m^4',
+    min = 0
+    )
+    
+    shear_modulus : FloatProperty(
+    name = 'Shear Modulus',
+    default = 0.0,
+    description = 'Enter modulus of shear in N/m^2',
+    min = 0
+    )
+    
+    area : FloatProperty(
+    name = 'Section Area(m^2)',
+    default = 0.0,
+    description = 'Enter area of the cross section in m^2',
+    min = 0
+    )
+    
+    density : FloatProperty(
+    name = 'Density (N/m^3)',
+    default = 0.0,
+    description = 'Enter the material density in N/m^3',
+    min = 0.0
+    )
+    
+    interp_path : StringProperty(
+    name = 'Interpreter Path',
+    description = 'bpy does not support matplotlib. Enter path of different python interpreter with matplotlib installed',
+    default = ''
+    )
+    
+    yield_stress : FloatProperty(
+    name = 'Yield Stress (MPa)',
+    default = 0.0,
+    description = 'Enter yield stress of material in MPa',
+    min = 0,
+    )
+    
+    neut_dist : FloatProperty(
+    name = 'Distance From Neutral Axis',
+    default = 0.0,
+    description = 'Enter distance from neutral axis for corresponding bending stress in m'
+    )
+    
+    shear_cf : FloatProperty(
+        name = 'Shear Correction Factor',
+        default = 1.0,
+        description = 'Enter shear correction factor',
+        min = 0.01,
+        max = 1
+    )
+    
+    distribute : BoolProperty(
+        name = 'Distribute load to selection',
+        default = False
+    )
+    
+    angle : FloatProperty(
+        name = 'Angle',
+        default = 0,
+        min = 0,
+        max = 360
+    )
+    
+    type_enum : bpy.props.EnumProperty(
+        name = 'Approximation Type',
+        description = 'Select the appropriate beam theory approximation. Use Timoshenko to include transverse shear',
+        items = [
+            ('OP1' , 'Euler-Bernoulli' , 'Euler-Bernoulli beam theory. Ignores transverse shear'),
+            ('OP2' , 'Timoshenko' , 'Timoshenko beam theory. Accounts for transverse shear')
+        ]
+    )
+    
+    
+    stress_enum : bpy.props.EnumProperty(
+        name = 'Stress Plot',
+        description = 'select stress type to be displayed in contour plot',
+        items = [
+            ('OP1' , 'Tensile' , 'Direct tensile stress'),
+            ('OP2' , 'Local Y Bending' , 'Direct bending stress along elemental Y direction at outer fibre'),
+            ('OP3' , 'Local Z Bending' , 'Direct bending stress along elemental Z direction at outer fibre'),
+            ('OP4' , 'Axial Torsion' , 'Direct torsion along the elemental axis (X-axis)')
+        ]
+    )
+    
+class MESH_OT_properties(bpy.types.Operator):
+    bl_idname = 'mesh.properties'
+    bl_label = 'add properties'
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        y = scene.my_addon_properties.youngs_modulus
+        iy = scene.my_addon_properties.mom_inertia_Y
+        iz = scene.my_addon_properties.mom_inertia_Z
+        g = scene.my_addon_properties.shear_modulus
+        a = scene.my_addon_properties.area
+        ys = scene.my_addon_properties.yield_stress
+        sf = scene.my_addon_properties.shear_cf
+        dn = scene.my_addon_properties.neut_dist
+        eu = scene.my_addon_properties.euler
+        ti = scene.my_addon_properties.timo
+        de = scene.my_addon_properties.density
+        slfwt = scene.my_addon_properties.slfwt
+
+        if eu == False and ti == False:
+            sf = 1.0
+        if ti == False and eu == True:
+            sf = 1.0
+        if slfwt == False:
+            de = 0.0
+        prop_path = os.path.join(dir_path, 'properties.csv')
+        with open(prop_path, 'w') as prop:
+            prop.write(f'{y},{iy},{iz},{g},{a},{ys},{sf},{dn},{de}')
+        return {'FINISHED'}
+    
+class MESH_OT_rotator(bpy.types.Operator):
+    bl_idname = 'mesh.rotator' 
+    bl_label  = 'rotate selected vertices by specified amount'
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        ro = scene.my_addon_properties.angle
+        so = bpy.context.active_object
+        verts = so.data.vertices
+        
+        select_vert = [list(verts).index(v) for v in verts if v.select]
+        rot_path = os.path.join(dir_path, 'rotates.csv')
+        with open(rot_path, 'w') as rot:
+            rot.write(f'{ro}')
+            for i in select_vert:
+                rot.write(f'{i},')
+            
+        return {'FINISHED'}
+    
+class MESH_OT_derotator(bpy.types.Operator):
+    bl_idname = 'mesh.derotator' 
+    bl_label  = 'unrotate selected vertices by specified amount'
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        ro = scene.my_addon_properties.angle
+        so = bpy.context.active_object
+
+        rot_path = os.path.join(dir_path, 'rotates.csv')
+        with open(rot_path, 'w') as rot:
+            rot.write('')
+            
+        return {'FINISHED'}
+
+
+class MESH_OT_Refiner(bpy.types.Operator):
+    bl_idname = 'mesh.refine_mesh' 
+    bl_label  = 'refine the elements'
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        so = bpy.context.active_object
+        if so and so.type == 'MESH':
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.delete(type = 'ONLY_FACE')
+
+        bpy.ops.mesh.subdivide(number_cuts = 1)
+
+        
+        return {'FINISHED'}
+            
+class MESH_OT_de_Refiner(bpy.types.Operator):
+    bl_idname = 'mesh.derefine_mesh' 
+    bl_label  = 'refine the elements'
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        so = bpy.context.active_object
+        if so and so.type == 'MESH':
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.delete(type = 'ONLY_FACE')
+            
+        bpy.ops.mesh.unsubdivide(iterations = 1)
+        
+        return {'FINISHED'}
+#CREATING MESH OPERATOR
+
+
+class MESH_OT_mesh_creator(bpy.types.Operator):
+    """adds the vertex and edge data into the list"""
+    bl_idname = 'mesh.meshdata_add'
+    bl_label = 'Apply Mesh'
+    
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+    def execute(self,context):
+        t1 = time.time()
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.sort_elements(type='RANDOMIZE')
+        bpy.ops.object.mode_set(mode='OBJECT')
+        methods = ['VIEW_ZAXIS', 'VIEW_XAXIS', 'CURSOR_DISTANCE']
+        print('Node numbering Methods: ',methods)
+        def rnge(method):
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.sort_elements(type = method)
+            edges = bpy.context.active_object.data.edges
+            bpy.ops.object.mode_set(mode='OBJECT')
+            max_arr = [abs(i.vertices[0]-i.vertices[1]) for i in edges ]
+            #print(max(max_arr)*6+6)
+            return max(max_arr)*6+6
+        
+    
+        minima = [rnge(pl) for pl in methods]
+        print('Possible Bandwidths: ',minima)
+        print('Method for Minimum Bandwidth: ', methods[minima.index(min(minima))], f':{min(minima)}' )
+        print('')
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.sort_elements(type=methods[minima.index(min(minima))])
+        bpy.ops.object.mode_set(mode='OBJECT')
+        define_mesh()
+        t2 = time.time()
+        #print(t2-t1)
+        return {'FINISHED'}
+    
+
+
+#CREATING BOUNDARY CONDITION OPERATOR
+class MESH_OT_add_bc_fr_vertex_list(bpy.types.Operator): # CATEGORY_TYPE_NAME
+    """adds the selected vertices to the boundary conditions list. needs the current active object """
+    
+    
+    bl_idname = 'mesh.bc_fr_vertices_add' 
+    bl_label  = 'add boundary conditions'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+    def execute(self,context):
+        scene = bpy.context.scene
+            
+        #global bound_list
+        #bound_list =[]
+        so = bpy.context.active_object
+        verts = so.data.vertices
+        x = scene.my_addon_properties.opt_x
+        y = scene.my_addon_properties.opt_y
+        z = scene.my_addon_properties.opt_z
+
+        rx = scene.my_addon_properties.opt_rx
+        ry = scene.my_addon_properties.opt_ry
+        rz = scene.my_addon_properties.opt_rz            
+        
+        
+        all = scene.my_addon_properties.opt_xyz 
+        bc_select_vert = [list(verts).index(v) for v in verts if v.select]
+ 
+        bc_path = os.path.join(dir_path, 'fr_bound_con.csv')
+    
+        with open(bc_path, 'a+') as bc:
+            def letter(letter_to_find,vert):
+                if os.path.getsize(bc_path) == 0 :
+                    return False
+                else:
+                    with open(bc_path, 'r') as bc:
+                        for row in csv.reader(bc) :
+                            if letter_to_find in row and str(vert) in row:
+                                return True
+                    return False
+                
+            for i in bc_select_vert:
+                if all and letter('a',i)==False:
+                        bc.write(f'{i},a\n')                                  
+
+                if  x and letter('x',i)==False:
+                        
+                        bc.write(f'{i},x\n')      
+
+                if y and letter('y',i)==False:
+                        
+                        bc.write(f'{i},y\n')
+                                          
+                if z and letter('z',i)==False:
+                        
+                        bc.write(f'{i},z\n')
+                        
+                if rx and letter('rx',i)==False:
+                        
+                        bc.write(f'{i},rx\n')
+                        
+                if ry and letter('ry',i)==False:
+                        
+                        bc.write(f'{i},ry\n')                    
+                                      
+                if rz and letter('rz',i)==False:
+                        
+                        bc.write(f'{i},rz\n')
+                        
+                        
+
+        return {'FINISHED'}
+
+    
+  
+    
+class MESH_OT_reset_fr_bc_list(bpy.types.Operator):
+    bl_idname = 'mesh.reset_fr_bound_con'
+    bl_label = 'reset to none'
+    
+    def execute(self,context):
+        bc_path = os.path.join(dir_path, 'fr_bound_con.csv')
+        with open(bc_path, 'w') as clr:
+           clr.write('') 
+
+        return {'FINISHED'}
+       
+
+
+# SELECTING THE VERTICES FOR FORCE APPLICATION
+class MESH_OT_fr_forces(bpy.types.Operator):
+    """Applies the given forces on the selected vertices"""
+    bl_idname = 'mesh.fr_load_vector_add'
+    bl_label = 'add forces'
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+    
+    def execute(self,context):
+        scene = bpy.context.scene
+        verts = bpy.context.active_object.data.vertices
+        f1 = scene.my_addon_properties.force_X
+        f2 = scene.my_addon_properties.force_Y
+        f3 = scene.my_addon_properties.force_Z
+        m1 = scene.my_addon_properties.moment_X
+        m2 = scene.my_addon_properties.moment_Y
+        m3 = scene.my_addon_properties.moment_Z
+        dist = scene.my_addon_properties.distribute
+        force_select_vert = [list(verts).index(v) for v in verts if v.select]
+        
+        force_path = os.path.join(dir_path, 'fr_force_list.csv')
+        with open(force_path, 'a+') as force:     
+            no = len(force_select_vert)       
+            nums = [f1,f2,f3,m1,m2,m3]
+            if dist :
+                nums = [f/no for f in nums]
+
+            for i in force_select_vert:
+                nums.append(i)
+            csv.writer(force).writerow(nums)
+        return {'FINISHED'}
+    
+    
+class MESH_OT_reset_fr_force_list(bpy.types.Operator):
+    bl_idname = 'mesh.reset_fr_forces'
+    bl_label = 'reset to none'
+    
+    def execute(self,context):
+        force_path = os.path.join(dir_path, 'fr_force_list.csv')
+        with open(force_path, 'w') as clr:
+           clr.write('') 
+        return {'FINISHED'}
+    
+    
+class MESH_OT_ploter(bpy.types.Operator):
+    import sys
+    bl_idname = 'mesh.runner'
+    bl_label = 'run_code'
+    bl_options = {'REGISTER', 'UNDO'}
+    def execute(self,context):
+        call_ploter()
+        return {'FINISHED'}
+    # Add the path to the directory containing your module
+    #sys.path.append('C:\\Users\\karth\\Documents\\CODE')
+    
+class MESH_OT_solver(bpy.types.Operator):
+    import sys
+    bl_idname = 'mesh.solver'
+    bl_label = 'Show'
+    bl_options = {'REGISTER', 'UNDO'}
+    def execute(self,context):
+        call_solver()
+        return {'FINISHED'}
+    
+class MESH_OT_strstype(bpy.types.Operator):
+    bl_idname = 'addonname.strsopts'
+    bl_label = 'OK'
+    def execute(self,context):
+        scene = context.scene
+        #option = self.stress_enum
+        addon_props = scene.my_addon_properties
+        option_path = os.path.join(dir_path, 'stress_options.csv')
+        with open(option_path,'w') as file:
+            opt= addon_props.stress_enum
+            if opt == 'OP1':
+                file.write('tensile')
+            if opt == 'OP2':
+                file.write('bendingY')
+            if opt == 'OP3':
+                file.write('bendingZ')
+            if opt == 'OP4':
+                file.write('torsion')
+    
+        return {'FINISHED'}
+class MESH_OT_sparser(bpy.types.Operator):
+    import sys
+    bl_idname = 'mesh.sparser'
+    bl_label = 'run_code'
+    bl_options = {'REGISTER', 'UNDO'}
+    def execute(self,context):
+        call_sparser()
+        return {'FINISHED'}
+
+ 
+#MASTER PARENT CLASS
+class VIEW3D_PT_FEA_panel_1(bpy.types.Panel): 
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'   #sidebar region
+    
+    #ADDING LABELS
+    bl_label = 'PRE-PROCESSING'
+    
+    #ADDING THE CATEGORY
+    bl_category = 'FrameFEA'
+    
+    def draw(self,context):
+        pass
+
+class VIEW3D_PT_preprocessor(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'   #sidebar region
+    bl_parent_id = "VIEW3D_PT_FEA_panel_1"
+    #ADDING LABELS
+    bl_label ='MATERIAL PROERTIES'
+    
+    #ADDING THE CATEGORY
+    bl_category = 'FrameFEA'
+    
+    def draw(self,context):
+        scene = context.scene
+        addon_props = scene.my_addon_properties
+        
+        box = self.layout.box()
+        
+        row = box.row()
+        row.label(text = 'Material Properties')
+        
+        row = box.row()
+        box.prop(addon_props, 'youngs_modulus')
+        col = box.column()
+        col.prop(addon_props, 'shear_modulus')
+        row = box.row()
+        row.prop(addon_props, 'density')
+        row = box.row()
+        row.prop(addon_props, 'mom_inertia_Y')
+        col = row.column()
+        col.prop(addon_props, 'mom_inertia_Z')
+        row = box.row()
+        row.prop(addon_props, 'area')
+        
+        row = box.row()
+        row.prop(addon_props, 'yield_stress')
+    
+        row = box.row()
+        row.label(text= 'Beam Theory')
+        row = box.row()
+        row.prop(addon_props,'euler')
+        col = row.column()
+        col.prop(addon_props, 'timo')
+        
+        row = box.row()
+        row.active = any((addon_props.timo,))
+        row.prop(addon_props,'shear_cf')
+        
+        row = box.row()
+        row.prop(addon_props, 'slfwt')
+        
+        row = box.row()
+        row.label(text = 'Orient elements')
+        row= box.row()
+        row.prop(addon_props, 'angle')
+        
+        
+        row.operator('mesh.rotator', text = 'Rotate Vertices')
+        row.operator('mesh.derotator', text = 'Reset')
+                
+        row = box.row()
+        row.prop(addon_props, 'neut_dist')
+        
+        row = box.row()
+        row.operator('mesh.properties', text = 'UPDATE')
+
+    
+
+
+class VIEW3D_PT_mesher(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'   #sidebar region
+    bl_parent_id = "VIEW3D_PT_FEA_panel_1"
+    #ADDING LABELS
+    bl_label = 'MESHING'
+    
+    #ADDING THE CATEGORY
+    bl_category = 'FrameFEA'
+    
+    def draw(self,context):
+        scene = context.scene
+        addon_props = scene.my_addon_properties
+        
+        row = self.layout.row()
+        row.operator('mesh.refine_mesh', text = 'Refine Mesh')
+
+        col =row.column()
+        row.operator('mesh.derefine_mesh', text = 'Unrefine Mesh')
+        
+
+        
+        row = self.layout.row()
+        row.operator('mesh.meshdata_add' , text = 'APPLY')
+        
+        layout = self.layout
+
+        ob = context.object
+        group = ob.vertex_groups.active
+
+        rows = 3
+        if group:
+            rows = 5
+
+        row = layout.row()
+        row.template_list("MESH_UL_vgroups", "", ob, "vertex_groups", ob.vertex_groups, "active_index", rows=rows)
+
+        col = row.column(align=True)
+
+        col.operator("object.vertex_group_add", icon='ADD', text="")
+        props = col.operator("object.vertex_group_remove", icon='REMOVE', text="")
+        props.all_unlocked = props.all = False
+
+        col.separator()
+
+        col.menu("MESH_MT_vertex_group_context_menu", icon='DOWNARROW_HLT', text="")
+
+        if group:
+            col.separator()
+            col.operator("object.vertex_group_move", icon='TRIA_UP', text="").direction = 'UP'
+            col.operator("object.vertex_group_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+        if (
+                ob.vertex_groups and
+                (ob.mode == 'EDIT' or
+                 (ob.mode == 'WEIGHT_PAINT' and ob.type == 'MESH' and ob.data.use_paint_mask_vertex))
+        ):
+            row = layout.row()
+
+            sub = row.row(align=True)
+            sub.operator("object.vertex_group_assign", text="Assign")
+            sub.operator("object.vertex_group_remove_from", text="Remove")
+
+            sub = row.row(align=True)
+            sub.operator("object.vertex_group_select", text="Select")
+            sub.operator("object.vertex_group_deselect", text="Deselect")
+
+
+
+class VIEW3D_PT_conditions(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'   #sidebar region
+    #bl_parent_id = "VIEW3D_PT_FEA_panel_1"
+    #ADDING LABELS
+    bl_label ='LOADS'
+    
+    #ADDING THE CATEGORY
+    bl_category = 'FrameFEA'
+    
+    def draw(self,context):
+        pass
+        
+        
+class VIEW3D_PT_boundcon(bpy.types.Panel):
+    bl_category = 'FrameFEA'
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'
+    #bl_context = ".objectmode"  # dot on purpose (access from topbar)
+    bl_label = "BOUNDARY CONDITIONS"
+    bl_parent_id = "VIEW3D_PT_conditions"
+
+    def draw(self, context):
+        scene = context.scene
+        addon_props = scene.my_addon_properties
+        
+        ########################
+        layout = self.layout
+
+        col = self.layout.column()
+        col.label(text='BOUNDARY CONDITIONS')
+        
+        row = self.layout.row()
+        row.prop(addon_props, "opt_x")
+        row.prop(addon_props, "opt_rx")
+        
+        row = self.layout.row()
+        row.prop(addon_props, "opt_y")
+        row.prop(addon_props, "opt_ry")
+        
+        row = self.layout.row()
+        row.prop(addon_props, "opt_z")
+        row.prop(addon_props, "opt_rz")
+        
+        layout.prop(addon_props, "opt_xyz")
+        col = self.layout.column()
+
+        
+        
+        col.operator('mesh.bc_fr_vertices_add', text = 'Add Boundary Conditions')
+        col.operator('mesh.reset_fr_bound_con', text = 'Reset Boundary Conditions')
+        
+        bc_path = os.path.join(dir_path, 'fr_bound_con.csv')
+        with open(bc_path, 'r') as fb:
+            l1 = []
+            for i in csv.reader(fb):
+                l1.append(i)
+            ln1 = len(l1)
+            col.label(text = f'Active Boundary Conditions: {ln1}')
+            
+            
+class VIEW3D_PT_forces(bpy.types.Panel):
+    bl_category = 'FrameFEA'
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'
+    #bl_context = ".objectmode"  # dot on purpose (access from topbar)
+    bl_label = "FORCES AND MOMENTS"
+    bl_parent_id = "VIEW3D_PT_conditions"
+    def draw(self,context):
+        scene = context.scene
+        addon_props = scene.my_addon_properties
+        
+        ########################
+        col = self.layout.column()
+        col.separator()
+        col.separator()
+        
+        col = self.layout.column()
+        col.label(text = 'FORCES AND MOMENTS')
+        
+        row = self.layout.row()
+        row.prop(addon_props, "force_X")
+        row.prop(addon_props, 'moment_X')
+        
+        row = self.layout.row()
+        row.prop(addon_props, "force_Y")
+        row.prop(addon_props, "moment_Y")
+        
+        row = self.layout.row()
+        row.prop(addon_props, "force_Z")
+        row.prop(addon_props, "moment_Z")
+        
+        row = self.layout.row()
+        row.prop(addon_props, 'distribute')
+        
+        col = self.layout.column()
+        col.operator('mesh.fr_load_vector_add', text = 'Add Forces and Moments')
+        col.operator('mesh.reset_fr_forces', text = 'Reset Forces')
+        
+        force_path = os.path.join(dir_path, 'fr_force_list.csv')
+        with open(force_path, 'r') as ff:
+            l2 = []
+            for j in csv.reader(ff):
+                l2.append(j)
+            ln2 = len(l2)
+            col.label(text = f'Active Forces: {int(ln2/2)}')    
+            
+            
+class VIEW3D_PT_solverpanel(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'  #3d viewport
+    bl_region_type = 'UI'   #sidebar region
+    #bl_parent_id = "VIEW3D_PT_FEA_panel_1"
+    #ADDING LABELS
+    bl_label ='SOLUTION'
+    
+    #ADDING THE CATEGORY
+    bl_category = 'FrameFEA'
+    
+    def draw(self,context):  
+        scene = context.scene
+        addon_props = scene.my_addon_properties
+
+
+        col = self.layout.column()
+        col.separator()
+        
+        row = self.layout.row()
+        row.prop(addon_props, 'interp_path')
+
+        row = self.layout.row()
+        row.operator('mesh.solver', text = 'SOLVE!')
+        col = self.layout.column()
+        col.separator()
+        col.separator()
+
+        row = self.layout.row()
+        row.prop(addon_props, 'stress_enum')
+
+        
+        row = self.layout.row()
+        row.operator('addonname.strsopts')
+        col = self.layout.column()
+        col.separator()
+        col.separator()
+        
+        row = self.layout.row()
+        row.operator('mesh.runner', text = 'SHOW!')
+        
+        row = self.layout.row()
+        row.operator('mesh.sparser', text = 'Show Sparsity')
+  
+classes = [VIEW3D_PT_FEA_panel_1, VIEW3D_PT_preprocessor ,VIEW3D_PT_mesher,MESH_OT_add_bc_fr_vertex_list, MESH_OT_mesh_creator, MESH_OT_fr_forces, MESH_OT_ploter,VIEW3D_PT_conditions,VIEW3D_PT_boundcon ,VIEW3D_PT_forces,VIEW3D_PT_solverpanel,MESH_OT_solver,MESH_OT_reset_fr_bc_list,MESH_OT_reset_fr_force_list, MyAddonProperties, MESH_OT_Refiner, MESH_OT_de_Refiner, MESH_OT_strstype, MESH_OT_properties,MESH_OT_rotator, MESH_OT_derotator, MESH_OT_sparser ]
+
+#REGISTER THE PANEL CLASS IN BLENDER
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+        
+    bpy.types.Scene.my_addon_properties = bpy.props.PointerProperty(type=MyAddonProperties)
+  
+#UNREGISTER THE PANEL CLASS IN BLENDER
+def unregister():
+
+    for clss in classes:            
+        bpy.utils.unregister_class(clss)
+        
+    del bpy.types.Scene.my_addon_properties
+        
+if __name__ == '__main__':
+    register()
+
+    
+
+
