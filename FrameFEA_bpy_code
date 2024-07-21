@@ -232,6 +232,14 @@ class MyAddonProperties(bpy.types.PropertyGroup):
         ]
     )
     
+    
+    plot_enum : bpy.props.EnumProperty(
+        name = 'Plot library',
+        description = 'select the python library to be used for plotting',
+        items = [
+            ('OP1' , 'Matplotlib' , 'Standard. Takes less time'),
+            ('OP2' , 'Mayavi' , 'Looks better. Takes longer time'),])
+            
 class MESH_OT_properties(bpy.types.Operator):
     bl_idname = 'mesh.properties'
     bl_label = 'add properties'
@@ -250,16 +258,22 @@ class MESH_OT_properties(bpy.types.Operator):
         ti = scene.my_addon_properties.timo
         de = scene.my_addon_properties.density
         slfwt = scene.my_addon_properties.slfwt
-
+        plop = scene.my_addon_properties.plot_enum
         if eu == False and ti == False:
             sf = 1.0
         if ti == False and eu == True:
             sf = 1.0
         if slfwt == False:
             de = 0.0
+            
+        pl = 0
+        if plop == 'OP1':
+            pl = 0
+        else: 
+            pl = 1
         prop_path = os.path.join(dir_path, 'properties.csv')
         with open(prop_path, 'w') as prop:
-            prop.write(f'{y},{iy},{iz},{g},{a},{ys},{sf},{dn},{de}')
+            prop.write(f'{y},{iy},{iz},{g},{a},{ys},{sf},{dn},{de},{pl}')
         return {'FINISHED'}
     
 class MESH_OT_rotator(bpy.types.Operator):
@@ -645,6 +659,10 @@ class VIEW3D_PT_preprocessor(bpy.types.Panel):
         row = box.row()
         row.prop(addon_props, 'neut_dist')
         
+        
+        row= box.row()
+        row.prop(addon_props, 'plot_enum')
+        
         row = box.row()
         row.operator('mesh.properties', text = 'UPDATE')
 
@@ -892,5 +910,3 @@ if __name__ == '__main__':
     register()
 
     
-
-
