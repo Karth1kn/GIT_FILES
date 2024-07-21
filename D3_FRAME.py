@@ -1,3 +1,4 @@
+#INSTALL MAYAVI AND MATPLOTLIB USING PIP
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -10,6 +11,7 @@ import os
 import sys
 import scipy
 from scipy.linalg import solveh_banded
+from mayavi import mlab
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 coord_path = os.path.join(script_dir, 'coord.csv')
@@ -21,8 +23,16 @@ option_path = os.path.join(script_dir, 'stress_options.csv')
 disp_path = os.path.join(script_dir,'displacements.csv')
 rot_path = os.path.join(script_dir,'rotates.csv')
 
-l1 = time.time()
 
+
+def timer(func):
+    def wrapper(*args, **kwargs):
+        t1 = time.time()
+        mat = func(*args, **kwargs)
+        t2 = time.time()
+        print(f'{func.__name__} finished in: {t2-t1}')
+        return mat
+    return wrapper
 
 with open(coord_path, 'r') as file:
     try:
@@ -41,6 +51,7 @@ with open(coord_path, 'r') as file:
                 x_ele = [val_array[k[0],0],val_array[k[1],0]]
                 y_ele = [val_array[k[0],1],val_array[k[1],1]]
                 z_ele = [val_array[k[0],2],val_array[k[1],2]]
+                #ax.plot3D(x_ele, y_ele, z_ele, 'blue')
 
     except Exception:
         print('error')
@@ -99,6 +110,7 @@ with open(prop_path,'r')as fl:
     for i in csv.reader(fl):
         for j in i:
             props.append(float(j))
+    plop = props[9]
     density = props[8]
     do = props[7]
     area =props[4]   #math.pi*(do**2-di**2)/4  #
@@ -294,8 +306,6 @@ def main_sequence():
         writer = csv.writer(disp, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         writer.writerow(nodal_displacement)
 
-main_sequence()
-l2 = time.time()
 if __name__ == "__main__":
     # Check if the script is run as the main program
 
@@ -421,13 +431,23 @@ def color_plotter(coordinate):
                 if fos**2>=1:
                     r,g,b,a = 0 ,1 ,0 ,1
                     #plt.annotate('material will fail at this load',(3000,-5000),color= 'white')
-                    ax.plot3D(c,d,e,color=(r,g,b,a))
+                    
+                    if plop ==0:
+                        ax.plot3D(c,d,e,color=(r,g,b,a))
+                    else: 
+                        line1 = mlab.plot3d(c,d,e,color=(r,g,b))
                 elif fos<=0:
                     r,g,b,a = 1+fos, 1+fos, 1,  1
-                    ax.plot3D(c,d,e,color=(r,g,b,a))
+                    if plop ==0:
+                        ax.plot3D(c,d,e,color=(r,g,b,a))
+                    else: 
+                        line1 = mlab.plot3d(c,d,e,color=(r,g,b))
                 elif fos>0:
                     r,g,b,a= 1, 1-fos, 1-fos,  1         
-                    ax.plot3D(c,d,e,color=(r,g,b,a))
+                    if plop ==0:
+                        ax.plot3D(c,d,e,color=(r,g,b,a))
+                    else: 
+                        line1 = mlab.plot3d(c,d,e,color=(r,g,b))
 
 
     ax.set_facecolor('black')
@@ -439,10 +459,13 @@ def color_plotter(coordinate):
     ax.set_zlim(-x-sc,x+sc)
     global t4
     t4 = time.time()
-    plt.show()
-
+    if plop ==0:
+        plt.show()
+    else: 
+        mlab.show()
 def ploter():
     color_plotter(shape_nodal_disp[:,:3])
+
 
 if __name__ == "__main__":
     # Check if the script is run as the main program
@@ -454,5 +477,3 @@ if __name__ == "__main__":
 
 
             
-
-
